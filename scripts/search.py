@@ -146,14 +146,36 @@ def resolve_sources(source_arg):
     return resolved
 
 
+def search_scraper_sites(keyword, count=10):
+    """Search via resource site scrapers (scraper.py)."""
+    import subprocess
+    scraper_script = __file__.replace("search.py", "scraper.py")
+    try:
+        result = subprocess.run(
+            [sys.executable, scraper_script, "search", keyword],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            return data.get("results", [])
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
+        pass
+    return []
+
+
 def search_all(keyword, count=10, sources=None):
-    """Search across specified sources."""
+    """Search across specified sources (yt-dlp + resource site scrapers)."""
     if sources is None:
         sources = list(SOURCE_GROUPS["global"]) + list(SOURCE_GROUPS["china"])
 
     all_results = []
     for src in sources:
         all_results.extend(search_source(src, keyword, count))
+
+    # Also search via resource site scrapers (MacCMS, custom frontend, etc.)
+    scraper_results = search_scraper_sites(keyword, count)
+    all_results.extend(scraper_results)
+
     return all_results
 
 
