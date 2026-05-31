@@ -14,13 +14,46 @@ import argparse
 import json
 import sys
 
-from sources import SOURCES, get_source, list_sources
+from sources import _get_sources, get_source, list_sources, list_sources_detail
 
 
 def cmd_sources(args):
     """List available sources."""
-    sources = list_sources()
+    sources = list_sources_detail()
     print(json.dumps(sources, ensure_ascii=False, indent=2))
+
+
+def cmd_probe(args):
+    """Probe which sources are reachable."""
+    import httpx
+    sources = _get_sources()
+    results = {}
+    for src_id, cfg in sources.items():
+        base_url = cfg.get("base_url", "")
+        if not base_url:
+            results[src_id] = {"label": cfg.get("label"), "status": "skip",
+                               "reason": "no base_url (needs SITE_API env)"}
+            continue
+        label = cfg.get("label", src_id)
+        print(f"  检测 {label} ({base_url}) ...", file=sys.stderr)
+        try:
+            with httpx.Client(timeout=10, follow_redirects=True, proxy=None, trust_env=False,
+                              headers={"User-Agent": "Mozilla/5.0"}) as client:
+                resp = client.head(base_url, timeout=8)
+                results[src_id] = {
+                    "label": label,
+                    "base_url": base_url,
+                    "status": "ok" if resp.status_code < 400 else "fail",
+                    "http_code": resp.status_code,
+                }
+        except Exception as e:
+            results[src_id] = {
+                "label": label,
+                "base_url": base_url,
+                "status": "fail",
+                "error": str(e)[:200],
+            }
+    print(json.dumps(results, ensure_ascii=False, indent=2))
 
 
 def cmd_search(args):
@@ -30,7 +63,12 @@ def cmd_search(args):
     if args.source:
         sources_to_search = [args.source]
     else:
-        sources_to_search = [k for k in SOURCES.keys()]
+        # Search only sources that have a base_url (skip maccms unless configured)
+        all_sources = _get_sources()
+        sources_to_search = [
+            k for k, v in all_sources.items()
+            if v.get("base_url", "")
+        ]
 
     for src_id in sources_to_search:
         src = get_source(src_id)
@@ -88,6 +126,9 @@ def main():
 
     p_sources = sub.add_parser("sources", help="List available sources")
     p_sources.set_defaults(func=cmd_sources)
+
+    p_probe = sub.add_parser("probe", help="Test which sources are reachable")
+    p_probe.set_defaults(func=cmd_probe)
 
     p_search = sub.add_parser("search", help="Search across sources")
     p_search.add_argument("keyword", help="Search keyword")

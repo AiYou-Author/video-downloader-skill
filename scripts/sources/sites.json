@@ -1,0 +1,50 @@
+{
+  "_comment": "Edit this file to add/remove sites. type: custom (HTML) | browser (SPA/React/Vue) | maccms (MacCMS API)",
+  "sites": {
+    "libvio": {
+      "type": "browser",
+      "label": "LIBVIO",
+      "base_url": "https://www.libvio.fun",
+      "search_path": "/so.html?wd={keyword}",
+      "search_wait_selector": ".module-item, a[href*='/detail/'], a[href*='/play/']",
+      "detail_pattern": "/detail/(\\d+)\\.html",
+      "play_pattern": "/play/(\\d+)-(\\d+)-(\\d+)\\.html"
+    },
+    "cupfox": {
+      "type": "browser",
+      "label": "茶杯狐",
+      "base_url": "https://cupfox.app",
+      "search_path": "/search?q={keyword}",
+      "search_wait_selector": ".movie-item, a[href*='/movie/'], .search-result",
+      "detail_pattern": "/movie/([a-zA-Z0-9]+)",
+      "play_pattern": "/play/(\\d+)-(\\d+)-(\\d+)\\.html"
+    },
+    "yyds": {
+      "type": "browser",
+      "label": "YYDS影视",
+      "base_url": "https://www.yydsys.top",
+      "search_path": "/vodsearch/-------------.html?wd={keyword}",
+      "search_wait_selector": ".module-item, a[href*='/voddetail/']",
+      "detail_pattern": "/voddetail/(\\d+)\\.html",
+      "play_pattern": "/vodplay/(\\d+)-(\\d+)-(\\d+)\\.html"
+    },
+    "hmdhive": {
+      "type": "browser",
+      "label": "HDHive/影巢",
+      "base_url": "https://www.hdhive.com",
+      "search_path": "/vodsearch/-------------.html?wd={keyword}",
+      "search_wait_selector": ".module-item, a[href*='/voddetail/']",
+      "detail_pattern": "/voddetail/(\\d+)\\.html",
+      "play_pattern": "/vodplay/(\\d+)-(\\d+)-(\\d+)\\.html"
+    },
+    "agedm": {
+      "type": "browser",
+      "label": "Age动漫",
+      "base_url": "https://www.agedm.org",
+      "search_path": "/search?q={keyword}",
+      "search_wait_selector": "a[href*='/detail/'], .video-card",
+      "detail_pattern": "/detail/(\\d+)",
+      "play_pattern": "/play/(\\d+)\\?(\\d+)"
+    }
+  }
+}
