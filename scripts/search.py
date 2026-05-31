@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Multi-source media search.
-Queries YouTube, Bilibili, and other platforms for videos matching a keyword.
+Multi-source media search via yt-dlp.
+Supports: YouTube, Bilibili, Dailymotion, NicoNico, SoundCloud,
+          Google Video, Yahoo, and more.
 """
 
 import argparse
@@ -15,124 +16,197 @@ except ImportError:
     sys.exit(1)
 
 
-def search_youtube(keyword, count=10):
-    """Search YouTube via yt-dlp."""
-    query = f"ytsearch{count}:{keyword}"
+# Source registry: { source_id: { prefix, label, url_template, extract_flat } }
+SOURCE_REGISTRY = {
+    "youtube": {
+        "prefix": "ytsearch",
+        "label": "YouTube",
+        "url_template": "https://www.youtube.com/watch?v={id}",
+        "extract_flat": True,
+    },
+    "youtube_music": {
+        "prefix": "ytsearch",
+        "label": "YouTube Music",
+        "url_template": "https://music.youtube.com/watch?v={id}",
+        "extract_flat": True,
+        "suffix": "music",
+    },
+    "bilibili": {
+        "prefix": "bilisearch",
+        "label": "Bilibili",
+        "url_template": "https://www.bilibili.com/video/{id}",
+        "extract_flat": True,
+    },
+    "dailymotion": {
+        "prefix": "dailymotionsearch",
+        "label": "Dailymotion",
+        "url_template": "https://www.dailymotion.com/video/{id}",
+        "extract_flat": True,
+    },
+    "nicovideo": {
+        "prefix": "niconicosearch",
+        "label": "NicoNico",
+        "url_template": "https://www.nicovideo.jp/watch/{id}",
+        "extract_flat": True,
+    },
+    "soundcloud": {
+        "prefix": "scsearch",
+        "label": "SoundCloud",
+        "url_template": "",
+        "extract_flat": True,
+    },
+    "googlevideo": {
+        "prefix": "gvsearch",
+        "label": "Google Video",
+        "url_template": "",
+        "extract_flat": True,
+    },
+    "yahoo": {
+        "prefix": "yahooseach",
+        "label": "Yahoo",
+        "url_template": "",
+        "extract_flat": True,
+    },
+}
+
+# Groups for convenience
+SOURCE_GROUPS = {
+    "all": ["youtube", "bilibili", "dailymotion", "nicovideo", "soundcloud"],
+    "video": ["youtube", "bilibili", "dailymotion", "nicovideo", "googlevideo"],
+    "audio": ["youtube_music", "soundcloud"],
+    "china": ["bilibili"],
+    "global": ["youtube", "dailymotion", "nicovideo", "googlevideo"],
+}
+
+
+def search_source(source_id, keyword, count=10):
+    """Search a single source."""
+    cfg = SOURCE_REGISTRY.get(source_id)
+    if not cfg:
+        return [{"source": source_id, "error": f"Unknown source: {source_id}"}]
+
+    suffix = f":{cfg['suffix']}" if cfg.get("suffix") else ""
+    query = f"{cfg['prefix']}{count}:{keyword}{suffix}"
+
     opts = {
         "quiet": True,
         "no_warnings": True,
-        "extract_flat": True,
         "skip_download": True,
     }
+
+    if cfg.get("extract_flat"):
+        opts["extract_flat"] = True
+
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(query, download=False)
             results = []
             for entry in (info.get("entries") or []):
+                vid_id = entry.get("id") or ""
+                url_template = cfg.get("url_template", "")
+                url = entry.get("url") or entry.get("webpage_url") or ""
+                if not url and url_template and vid_id:
+                    url = url_template.format(id=vid_id)
+
                 results.append({
-                    "source": "youtube",
-                    "id": entry.get("id"),
+                    "source": source_id,
+                    "source_label": cfg["label"],
+                    "id": vid_id,
                     "title": entry.get("title"),
-                    "url": entry.get("url") or f"https://www.youtube.com/watch?v={entry.get('id')}",
+                    "url": url,
                     "duration": entry.get("duration"),
-                    "uploader": entry.get("uploader"),
+                    "uploader": entry.get("uploader") or entry.get("channel"),
                     "view_count": entry.get("view_count"),
+                    "description": (entry.get("description") or "")[:200],
                 })
             return results
     except Exception as e:
-        return [{"source": "youtube", "error": str(e)}]
+        err_msg = str(e)
+        # Truncate long error messages
+        if len(err_msg) > 300:
+            err_msg = err_msg[:300] + "..."
+        return [{"source": source_id, "source_label": cfg["label"], "error": err_msg}]
 
 
-def search_bilibili(keyword, count=10):
-    """Search Bilibili via yt-dlp."""
-    query = f"bilisearch{count}:{keyword}"
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "extract_flat": True,
-        "skip_download": True,
-    }
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(query, download=False)
-            results = []
-            for entry in (info.get("entries") or []):
-                results.append({
-                    "source": "bilibili",
-                    "id": entry.get("id"),
-                    "title": entry.get("title"),
-                    "url": entry.get("url") or f"https://www.bilibili.com/video/{entry.get('id')}",
-                    "duration": entry.get("duration"),
-                    "uploader": entry.get("uploader"),
-                    "view_count": entry.get("view_count"),
-                })
-            return results
-    except Exception as e:
-        return [{"source": "bilibili", "error": str(e)}]
-
-
-def search_generic(keyword, count=10):
-    """Search across generic extractors (TikTok, Vimeo, etc.)."""
-    # Use yt-dlp's generic search
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "extract_flat": True,
-        "skip_download": True,
-        "default_search": "auto",
-    }
-    results = []
-    for extractor in ["duckduckgo", "google"]:
-        try:
-            query = f"{extractor}:video {keyword}"
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(query, download=False)
-                for entry in (info.get("entries") or [])[:count]:
-                    results.append({
-                        "source": extractor,
-                        "id": entry.get("id"),
-                        "title": entry.get("title"),
-                        "url": entry.get("url") or entry.get("webpage_url", ""),
-                        "duration": entry.get("duration"),
-                    })
-        except Exception:
-            pass
-    return results
+def resolve_sources(source_arg):
+    """Resolve source names, including group names."""
+    requested = [s.strip() for s in source_arg.split(",")]
+    resolved = []
+    for name in requested:
+        if name in SOURCE_GROUPS:
+            for s in SOURCE_GROUPS[name]:
+                if s not in resolved:
+                    resolved.append(s)
+        elif name in SOURCE_REGISTRY:
+            if name not in resolved:
+                resolved.append(name)
+        else:
+            # Unknown — skip with warning
+            print(f"Warning: unknown source/group '{name}', skipped", file=sys.stderr)
+    return resolved
 
 
 def search_all(keyword, count=10, sources=None):
-    """Search across all or specified sources."""
+    """Search across specified sources."""
     if sources is None:
-        sources = ["youtube", "bilibili"]
+        sources = list(SOURCE_GROUPS["global"]) + list(SOURCE_GROUPS["china"])
 
     all_results = []
     for src in sources:
-        if src == "youtube":
-            all_results.extend(search_youtube(keyword, count))
-        elif src == "bilibili":
-            all_results.extend(search_bilibili(keyword, count))
-
+        all_results.extend(search_source(src, keyword, count))
     return all_results
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Search media across platforms")
+    parser = argparse.ArgumentParser(
+        description="Search media across platforms",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Sources:
+  Individual:  """ + ", ".join(SOURCE_REGISTRY.keys()) + """
+  Groups:
+    all      — """ + ", ".join(SOURCE_GROUPS["all"]) + """
+    video    — """ + ", ".join(SOURCE_GROUPS["video"]) + """
+    audio    — """ + ", ".join(SOURCE_GROUPS["audio"]) + """
+    china    — """ + ", ".join(SOURCE_GROUPS["china"]) + """
+    global   — """ + ", ".join(SOURCE_GROUPS["global"]) + """
+
+Examples:
+  %(prog)s "流浪地球2"
+  %(prog)s "Never Gonna Give You Up" --sources youtube,soundcloud
+  %(prog)s "進撃の巨人" --sources nicovideo
+  %(prog)s "周杰伦" --sources audio
+        """,
+    )
     parser.add_argument("keyword", help="Search keyword")
     parser.add_argument("--count", "-n", type=int, default=10, help="Results per source")
-    parser.add_argument("--sources", "-s", default="youtube,bilibili",
-                        help="Comma-separated sources (youtube,bilibili)")
-    parser.add_argument("--json", action="store_true", default=True,
-                        help="Output JSON")
+    parser.add_argument("--sources", "-s", default="youtube,bilibili,dailymotion",
+                        help="Comma-separated source IDs or group names")
     args = parser.parse_args()
 
-    sources = [s.strip() for s in args.sources.split(",")]
+    sources = resolve_sources(args.sources)
+    if not sources:
+        print("No valid sources specified", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"搜索 '{args.keyword}' 在: {', '.join(sources)} ...", file=sys.stderr)
+
     results = search_all(args.keyword, args.count, sources)
+
+    # Separate errors from results
+    valid = [r for r in results if "error" not in r]
+    errors = [r for r in results if "error" in r]
 
     output = {
         "keyword": args.keyword,
-        "total": len(results),
-        "results": results,
+        "sources_queried": sources,
+        "total": len(valid),
+        "errors": len(errors),
+        "results": valid,
     }
+    if errors:
+        output["error_details"] = errors
+
     print(json.dumps(output, ensure_ascii=False, indent=2))
 
 

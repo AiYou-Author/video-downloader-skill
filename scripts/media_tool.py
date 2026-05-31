@@ -103,13 +103,15 @@ def cmd_download(args):
         target = valid_results[args.index]
     else:
         # Auto-pick: first result from preferred source
-        # Prefer the first available: youtube > bilibili > any
-        for src in ["youtube", "bilibili"]:
+        # Prefer in order: youtube > bilibili > dailymotion > nicovideo > any
+        preference = ["youtube", "bilibili", "dailymotion", "nicovideo"]
+        target = None
+        for src in preference:
             src_results = [r for r in valid_results if r.get("source") == src]
             if src_results:
                 target = src_results[0]
                 break
-        else:
+        if target is None:
             target = valid_results[0]
 
     title = target.get("title", "Unknown")
@@ -199,8 +201,8 @@ def main():
     p_search = sub.add_parser("search", help="Search for media")
     p_search.add_argument("keyword", help="Search keyword")
     p_search.add_argument("--count", "-n", type=int, default=10, help="Results per source")
-    p_search.add_argument("--sources", "-s", default="youtube,bilibili",
-                          help="Sources (youtube,bilibili)")
+    p_search.add_argument("--sources", "-s", default="youtube,bilibili,dailymotion",
+                          help="Sources (IDs or group names: all, video, audio, china, global)")
     p_search.set_defaults(func=lambda a: cmd_search(a) and None)
 
     # download
